@@ -32,30 +32,56 @@ const ChartContainer = styled.div`
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 `;
 
+const LoadingMessage = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  font-size: 1.2rem;
+  color: #666;
+`;
+
+const ErrorMessage = styled.div`
+  color: #dc3545;
+  text-align: center;
+  margin-top: 1rem;
+`;
+
 const Home: React.FC = () => {
   const [stockData, setStockData] = useState<StockData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStockData = async () => {
       try {
-        // Using Alpha Vantage API for stock data
+        setLoading(true);
+        setError(null);
+
+        const apiKey = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY;
         const response = await axios.get(
-          `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol=GOOGL&apikey=demo`
+          `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=GOOGL&apikey=${apiKey}&outputsize=full`
         );
 
-        const monthlyData = response.data['Monthly Time Series'];
-        const formattedData = Object.entries(monthlyData)
-          .map(([date, values]: [string, any]) => ({
-            date,
-            close: parseFloat(values['4. close']),
-          }))
-          .reverse();
+        if (response.data['Time Series (Daily)']) {
+          const dailyData = response.data['Time Series (Daily)'];
+          const formattedData = Object.entries(dailyData)
+            .slice(0, 90) // Get last 90 days for better visualization
+            .map(([date, values]: [string, any]) => ({
+              date,
+              close: Number(values['4. close'])
+            }))
+            .reverse();
 
-        setStockData(formattedData);
+          setStockData(formattedData);
+        } else {
+          setError('No data available');
+        }
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching stock data:', error);
+        setError('Failed to fetch stock data. Please try again later.');
         setLoading(false);
       }
     };
@@ -66,12 +92,14 @@ const Home: React.FC = () => {
   return (
     <HomeContainer>
       <Header>
-        <h1>Google Stock Price History</h1>
+        <h1>Google (GOOGL) Stock Price - Last 90 Days</h1>
       </Header>
 
       <ChartContainer>
         {loading ? (
-          <p>Loading...</p>
+          <LoadingMessage>Loading stock data...</LoadingMessage>
+        ) : error ? (
+          <ErrorMessage>{error}</ErrorMessage>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={stockData}>
@@ -81,15 +109,24 @@ const Home: React.FC = () => {
                 angle={-45}
                 textAnchor="end"
                 height={70}
+                interval={5}
               />
-              <YAxis />
-              <Tooltip />
+              <YAxis
+                domain={['auto', 'auto']}
+                tickFormatter={(value) => `$${value.toFixed(2)}`}
+              />
+              <Tooltip
+                formatter={(value: number) => [`$${value.toFixed(2)}`, 'Stock Price']}
+                labelFormatter={(label) => `Date: ${label}`}
+              />
               <Legend />
               <Line
                 type="monotone"
                 dataKey="close"
-                stroke="#8884d8"
-                name="Stock Price"
+                stroke="#4285f4"
+                name="Stock Price ($)"
+                dot={false}
+                strokeWidth={2}
               />
             </LineChart>
           </ResponsiveContainer>
